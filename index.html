@@ -2,219 +2,267 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>私人加密通道</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>私人通话</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        /* 极简黑客风 UI */
-        body { margin: 0; padding: 0; background-color: #0f0f0f; color: #00ff41; font-family: 'Courier New', Courier, monospace; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
-        
-        /* 顶部控制栏 */
-        .header { padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: #1a1a1a; z-index: 100; }
-        .logo { font-weight: bold; font-size: 1.2rem; letter-spacing: 2px; }
-        .controls { display: flex; gap: 10px; }
-        input { background: #222; border: 1px solid #444; color: #fff; padding: 5px 10px; border-radius: 4px; font-family: inherit; }
-        button { background: #004400; color: #00ff41; border: 1px solid #00ff41; padding: 5px 15px; cursor: pointer; font-family: inherit; transition: all 0.2s; }
-        button:hover { background: #00ff41; color: #000; }
-        
-        /* 主体布局 */
-        .main-container { display: flex; flex: 1; overflow: hidden; position: relative; }
-        
-        /* 视频区域 */
-        .video-area { flex: 3; display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 10px; padding: 10px; background: #000; overflow-y: auto; }
-        video { max-width: 45%; max-height: 45%; border: 1px solid #333; border-radius: 4px; background: #111; object-fit: cover; }
-        /* 屏幕共享时放大 */
-        video.screen-share { width: 90%; height: 80%; max-width: none; max-height: none; }
+        /* --- 手机端优先的样式设计 --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
+        body { background: #121212; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
-        /* 聊天区域 (默认隐藏，点击展开) */
-        .chat-area { flex: 1; max-width: 300px; background: #111; border-left: 1px solid #333; display: flex; flex-direction: column; }
-        .messages { flex: 1; padding: 10px; overflow-y: auto; font-size: 0.9rem; }
-        .msg { margin-bottom: 8px; word-break: break-all; }
-        .msg.sys { color: #666; font-style: italic; }
-        .msg.me { color: #00ff41; }
-        .msg.peer { color: #00ccff; }
-        .input-box { padding: 10px; border-top: 1px solid #333; display: flex; }
-        .input-box input { flex: 1; }
+        /* 登录页（设置ID） */
+        #login-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #121212; z-index: 999; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; transition: transform 0.3s ease; }
+        .login-box { width: 100%; max-width: 320px; text-align: center; }
+        h2 { margin-bottom: 30px; font-weight: 300; letter-spacing: 2px; }
+        .input-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; color: #888; margin-bottom: 5px; font-size: 14px; }
+        input { width: 100%; padding: 15px; background: #222; border: 1px solid #333; color: #fff; border-radius: 12px; font-size: 16px; }
+        input:focus { border-color: #007bff; }
+        
+        .btn-main { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; margin-top: 10px; cursor: pointer; active: scale(0.98); }
+        .btn-main:active { background: #0056b3; transform: scale(0.98); }
+
+        /* 视频通话页 */
+        #video-screen { flex: 1; display: flex; flex-direction: column; position: relative; display: none; }
+        
+        /* 视频容器 */
+        .video-container { flex: 1; position: relative; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        
+        /* 对方的大画面 */
+        #remote-video { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* 自己的小画面（悬浮） */
+        #local-video { position: absolute; right: 20px; top: 20px; width: 100px; height: 140px; background: #222; border-radius: 10px; border: 2px solid rgba(255,255,255,0.2); object-fit: cover; z-index: 10; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: all 0.3s; }
+
+        /* 底部控制栏 */
+        .controls { height: 80px; background: rgba(30,30,30,0.9); display: flex; justify-content: space-around; align-items: center; padding-bottom: 10px; backdrop-filter: blur(10px); }
+        .btn-icon { width: 50px; height: 50px; border-radius: 50%; border: none; background: #333; color: #fff; font-size: 20px; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+        .btn-icon.red { background: #ff3b30; }
+        .btn-icon.green { background: #34c759; }
+        .btn-icon:active { transform: scale(0.9); }
 
         /* 状态提示 */
-        #my-id-display { color: #ffeb3b; font-weight: bold; cursor: pointer; text-decoration: underline; }
+        #status-toast { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 20px; font-size: 14px; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 100; }
+
+        /* 聊天层 */
+        #chat-layer { position: absolute; bottom: 80px; left: 0; width: 100%; height: 300px; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); pointer-events: none; display: flex; flex-direction: column; justify-content: flex-end; padding: 20px; }
+        .msg { background: rgba(255,255,255,0.15); padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; max-width: 80%; width: fit-content; font-size: 14px; pointer-events: auto; backdrop-filter: blur(4px); animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         
-        /* 手机适配 */
-        @media (max-width: 768px) {
-            .video-area { flex-direction: column; justify-content: flex-start; }
-            video { max-width: 100%; width: 100%; height: auto; }
-            .chat-area { display: none; position: absolute; right: 0; top: 0; bottom: 0; width: 80%; z-index: 50; border-left: 1px solid #00ff41; }
-            .chat-area.active { display: flex; }
-            .controls input { width: 80px; }
-        }
+        .chat-input-box { position: absolute; bottom: 90px; left: 5%; width: 90%; display: none; pointer-events: auto; }
+        .chat-input-box input { background: rgba(50,50,50,0.9); border: 1px solid #555; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <div class="logo">ENCRYPTED_LINK</div>
-    <div style="font-size: 0.8rem;">
-        我的ID: <span id="my-id-display" onclick="copyId()">获取中...</span>
+    <div id="login-screen">
+        <div class="login-box">
+            <h2>🔐 私人加密连线</h2>
+            <div class="input-group">
+                <label>给自己起个短名 (如: 001)</label>
+                <input type="text" id="my-id-input" placeholder="输入你的 ID">
+            </div>
+            <div class="input-group">
+                <label>朋友的短名 (如: 002)</label>
+                <input type="text" id="target-id-input" placeholder="输入对方 ID">
+            </div>
+            <button class="btn-main" onclick="startApp()">进入连接</button>
+            <p style="margin-top: 15px; color: #666; font-size: 12px;">如果连不上，请尝试切换WiFi/4G</p>
+        </div>
     </div>
-    <div class="controls">
-        <input type="text" id="target-id" placeholder="对方ID">
-        <button onclick="connectPeer()">连接</button>
-        <button onclick="shareScreen()">📺 共享屏幕</button>
-        <button onclick="toggleChat()" style="border-color: #00ccff; color: #00ccff;">💬 聊天</button>
-    </div>
-</div>
 
-<div class="main-container">
-    <div class="video-area" id="video-grid">
-        <video id="local-video" muted autoplay playsinline></video>
-    </div>
-    
-    <div class="chat-area" id="chat-panel">
-        <div class="messages" id="msgs">
-            <div class="msg sys">>>> 系统就绪。链接建立后，数据点对点加密传输。</div>
-            <div class="msg sys">>>> 警告：刷新页面将丢失所有聊天记录。</div>
+    <div id="video-screen">
+        <div class="video-container">
+            <video id="remote-video" autoplay playsinline></video>
+            <video id="local-video" autoplay playsinline muted></video>
+            <div id="status-toast">等待连接...</div>
+            
+            <div id="chat-layer" id="messages"></div>
+            
+            <div class="chat-input-box" id="chat-input-box">
+                <input type="text" id="msg-input" placeholder="发送消息..." onkeypress="if(event.key==='Enter') sendMsg()">
+            </div>
         </div>
-        <div class="input-box">
-            <input type="text" id="chat-input" placeholder="输入消息..." onkeypress="if(event.key==='Enter') sendMsg()">
-            <button onclick="sendMsg()">></button>
+
+        <div class="controls">
+            <button class="btn-icon" onclick="toggleChat()">💬</button>
+            <button class="btn-icon green" onclick="callPeer()">📞</button>
+            <button class="btn-icon" onclick="shareScreen()">📺</button>
+            <button class="btn-icon red" onclick="location.reload()">❌</button>
         </div>
     </div>
-</div>
 
 <script>
-    // 初始化 PeerJS (使用官方免费服务器)
-    const peer = new Peer();
-    let myStream = null;
-    let peers = {}; // 存储所有连接
+    let peer;
+    let myStream;
+    let currentConn;
+    let currentCall;
 
-    // DOM 元素
-    const videoGrid = document.getElementById('video-grid');
-    const msgs = document.getElementById('msgs');
-    
-    // 1. 启动：获取本地摄像头
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-        myStream = stream;
-        const localVideo = document.getElementById('local-video');
-        localVideo.srcObject = stream;
-        localVideo.muted = true; // 自己静音
-    }).catch(err => log("系统", "无法获取摄像头权限，仅能观看", "sys"));
+    // 增强版穿透服务器列表 (增加连接成功率)
+    const peerConfig = {
+        config: {
+            'iceServers': [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.westhawk.co.uk:3478' }
+            ]
+        },
+        debug: 1
+    };
 
-    // 2. Peer 开启成功
-    peer.on('open', id => {
-        document.getElementById('my-id-display').innerText = id;
-        log("系统", "你的安全ID已生成。点击顶部ID复制发给朋友。", "sys");
-    });
+    function showToast(text) {
+        const t = document.getElementById('status-toast');
+        t.innerText = text;
+        t.style.opacity = 1;
+        setTimeout(() => t.style.opacity = 0, 3000);
+    }
 
-    // 3. 被呼叫（视频）
-    peer.on('call', call => {
-        if(confirm("检测到接入请求，是否接通？")) {
-            call.answer(myStream);
-            handleStream(call);
-        }
-    });
+    // 1. 启动应用
+    function startApp() {
+        const myId = document.getElementById('my-id-input').value.trim();
+        const targetId = document.getElementById('target-id-input').value.trim();
 
-    // 4. 被连接（文字）
-    peer.on('connection', conn => {
-        setupConn(conn);
-    });
+        if (!myId) return alert("请先输入你的 ID");
 
-    // --- 主动功能 ---
-
-    // 连接别人
-    function connectPeer() {
-        const id = document.getElementById('target-id').value.trim();
-        if(!id) return alert("请输入对方ID");
+        // 切换界面
+        document.getElementById('login-screen').style.transform = 'translateY(-100%)';
+        document.getElementById('video-screen').style.display = 'flex';
         
-        // 发起视频
+        // 保存对方ID方便后续调用
+        window.targetId = targetId;
+
+        // 初始化摄像头
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(stream => {
+                myStream = stream;
+                document.getElementById('local-video').srcObject = stream;
+                initPeer(myId);
+            })
+            .catch(err => {
+                alert("无法获取摄像头权限，请在浏览器设置中允许。");
+                initPeer(myId); // 即使没摄像头也尝试初始化，为了能看别人
+            });
+    }
+
+    function initPeer(id) {
+        // 使用自定义 ID 初始化
+        peer = new Peer(id, peerConfig);
+
+        peer.on('open', (id) => {
+            showToast("就绪，ID: " + id);
+            // 如果填了对方ID，自动尝试连接文字通道
+            if(window.targetId) connectData(window.targetId);
+        });
+
+        peer.on('error', (err) => {
+            if(err.type === 'unavailable-id') alert("这个 ID 已经被占用了，换一个吧");
+            else showToast("连接错误: " + err.type);
+        });
+
+        // 被呼叫（视频）
+        peer.on('call', call => {
+            if(confirm("朋友请求视频通话，接听吗？")) {
+                call.answer(myStream);
+                handleStream(call);
+            }
+        });
+
+        // 被连接（文字）
+        peer.on('connection', conn => {
+            setupConn(conn);
+        });
+    }
+
+    // 2. 主动拨打
+    function callPeer() {
+        const id = window.targetId;
+        if(!id) return promptInputId();
+        
+        showToast("正在呼叫 " + id + "...");
         const call = peer.call(id, myStream);
         handleStream(call);
-        
-        // 发起文字连接
+        connectData(id);
+    }
+
+    function connectData(id) {
+        if(currentConn && currentConn.open) return;
         const conn = peer.connect(id);
         setupConn(conn);
     }
 
-    // 共享屏幕
+    function promptInputId() {
+        const id = prompt("请输入朋友的ID");
+        if(id) {
+            window.targetId = id;
+            callPeer();
+        }
+    }
+
+    // 3. 处理视频流
+    function handleStream(call) {
+        currentCall = call;
+        call.on('stream', remoteStream => {
+            document.getElementById('remote-video').srcObject = remoteStream;
+            showToast("视频已连接");
+            // 视频连通后，把自己的小窗口移到角落
+            document.getElementById('local-video').style.display = 'block';
+        });
+        call.on('close', () => showToast("通话结束"));
+    }
+
+    // 4. 处理文字消息
+    function setupConn(conn) {
+        currentConn = conn;
+        conn.on('open', () => showToast("文字通道已连接"));
+        conn.on('data', data => {
+            if(typeof data === 'string') showMsg(data, false);
+        });
+    }
+
+    // 5. 屏幕共享
     async function shareScreen() {
+        if(!currentCall) return alert("请先建立视频通话");
         try {
             const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             const screenTrack = screenStream.getVideoTracks()[0];
+            const sender = currentCall.peerConnection.getSenders().find(s => s.track.kind === 'video');
+            sender.replaceTrack(screenTrack);
             
-            // 找到所有的视频发送器并替换
-            for (let id in peers) {
-                if(peers[id].call) {
-                    const sender = peers[id].call.peerConnection.getSenders().find(s => s.track.kind === 'video');
-                    sender.replaceTrack(screenTrack);
-                }
-            }
-            
-            // 屏幕共享结束时恢复摄像头
             screenTrack.onended = () => {
-                const videoTrack = myStream.getVideoTracks()[0];
-                for (let id in peers) {
-                    if(peers[id].call) {
-                        const sender = peers[id].call.peerConnection.getSenders().find(s => s.track.kind === 'video');
-                        sender.replaceTrack(videoTrack);
-                    }
-                }
+                sender.replaceTrack(myStream.getVideoTracks()[0]);
             };
         } catch(e) { console.error(e); }
     }
 
-    // 发送消息
+    // 聊天功能
+    function toggleChat() {
+        const box = document.getElementById('chat-input-box');
+        box.style.display = box.style.display === 'block' ? 'none' : 'block';
+        if(box.style.display === 'block') document.getElementById('msg-input').focus();
+    }
+
     function sendMsg() {
-        const input = document.getElementById('chat-input');
+        const input = document.getElementById('msg-input');
         const text = input.value;
         if(!text) return;
-        
-        // 广播给所有人
-        for(let id in peers) {
-            if(peers[id].conn) peers[id].conn.send(text);
+        if(currentConn && currentConn.open) {
+            currentConn.send(text);
+            showMsg(text, true);
+            input.value = '';
+        } else {
+            showToast("未连接到朋友");
         }
-        log("我", text, "me");
-        input.value = '';
     }
 
-    // --- 辅助逻辑 ---
-
-    function handleStream(call) {
-        const video = document.createElement('video');
-        call.on('stream', stream => {
-            // 避免重复添加
-            if(video.srcObject) return;
-            video.srcObject = stream;
-            video.play();
-            videoGrid.appendChild(video);
-        });
-        call.on('close', () => video.remove());
-        peers[call.peer] = { ...peers[call.peer], call: call };
-    }
-
-    function setupConn(conn) {
-        conn.on('open', () => {
-            log("系统", "已连接: " + conn.peer, "sys");
-            peers[conn.peer] = { ...peers[conn.peer], conn: conn };
-        });
-        conn.on('data', data => log("对方", data, "peer"));
-        conn.on('close', () => log("系统", "对方已断开", "sys"));
-    }
-
-    function log(name, text, type) {
+    function showMsg(text, isMe) {
         const div = document.createElement('div');
-        div.className = `msg ${type}`;
-        div.innerText = `[${name}] ${text}`;
-        msgs.appendChild(div);
-        msgs.scrollTop = msgs.scrollHeight;
-    }
-
-    function copyId() {
-        navigator.clipboard.writeText(document.getElementById('my-id-display').innerText);
-        alert("ID已复制");
-    }
-
-    function toggleChat() {
-        const chat = document.getElementById('chat-panel');
-        chat.classList.toggle('active');
+        div.className = 'msg';
+        div.style.alignSelf = isMe ? 'flex-end' : 'flex-start';
+        div.style.background = isMe ? 'rgba(0,123,255,0.6)' : 'rgba(255,255,255,0.15)';
+        div.innerText = text;
+        document.getElementById('chat-layer').appendChild(div);
+        setTimeout(() => div.remove(), 10000); // 10秒后消息自动消失
     }
 </script>
 </body>
